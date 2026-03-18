@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>零股庫存監控</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13161d;
+    --bg3: #1a1e28;
+    --border: #252a38;
+    --accent: #4ade80;
+    --accent2: #22d3ee;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --card: #161b26;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans TC', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    padding: 28px 36px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  header .icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  header p {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .main { padding: 28px 36px; }
+
+  /* UPLOAD ZONE */
+  .upload-section {
+    background: var(--card);
+    border: 1.5px dashed var(--border);
+    border-radius: 16px;
+    padding: 36px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    position: relative;
+  }
+  .upload-section:hover { border-color: var(--accent); background: #1a2535; }
+  .upload-section input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-icon { font-size: 2.4rem; margin-bottom: 10px; }
+  .upload-section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+  .upload-section p { font-size: 0.8rem; color: var(--muted); }
+
+  /* FILE CHIPS */
+  .file-chips {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
+  }
+  .chip {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+  .chip .remove {
+    cursor: pointer; color: var(--muted); font-size: 1rem;
+    transition: color 0.15s;
+  }
+  .chip .remove:hover { color: var(--danger); }
+  .chip .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  /* ACTIONS */
+  .actions { margin-top: 20px; display: flex; gap: 12px; }
+  .btn {
+    padding: 10px 22px; border-radius: 9px; border: none;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--accent); color: #0a0f0a;
+  }
+  .btn-primary:hover { background: #6ee7a0; }
+  .btn-secondary {
+    background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--muted); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* SUMMARY CARDS */
+  .summary-row {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px; margin-top: 28px;
+  }
+  .summary-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+    position: relative; overflow: hidden;
+  }
+  .summary-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  }
+  .summary-card .name { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+  .summary-card .count { font-size: 1.7rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .summary-card .sub { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+  .summary-card .missing-badge {
+    display: inline-block; margin-top: 8px;
+    background: rgba(248,113,113,0.15); color: var(--danger);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: 5px; padding: 2px 8px; font-size: 0.72rem; font-weight: 600;
+  }
+  .ok-badge {
+    display: inline-block; margin-top: 8px;
+    background: rgba(74,222,128,0.12); color: var(--accent);
+    border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 5px; padding: 2px 8px; font-size: 0.72rem; font-weight: 600;
+  }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-top: 28px; flex-wrap: wrap; }
+  .tab {
+    padding: 7px 16px; border-radius: 8px; font-size: 0.82rem;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: var(--text); border-color: var(--muted); }
+  .tab.active {
+    background: var(--bg3); color: var(--text);
+    border-color: var(--accent2);
+  }
+
+  /* TABLE */
+  .table-wrap {
+    margin-top: 16px; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  thead tr { background: var(--bg3); }
+  thead th {
+    padding: 11px 16px; text-align: left; font-weight: 600;
+    color: var(--muted); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--bg3); }
+  tbody td { padding: 10px 16px; }
+
+  .code-cell { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--accent2); }
+  .has { color: var(--accent); text-align: center; font-size: 1rem; }
+  .no { color: var(--danger); text-align: center; font-size: 0.75rem; font-weight: 700; }
+  .header-name { font-size: 0.72rem; }
+
+  /* MISSING PANEL */
+  .missing-list {
+    margin-top: 16px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .missing-item {
+    background: rgba(248,113,113,0.07); border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 8px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .missing-item .mcode { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--danger); font-size: 0.88rem; }
+  .missing-item .mname { font-size: 0.8rem; color: var(--text); }
+
+  /* FILTER */
+  .filter-row {
+    display: flex; gap: 10px; margin-top: 16px; align-items: center; flex-wrap: wrap;
+  }
+  .search-input {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; color: var(--text);
+    font-family: inherit; font-size: 0.82rem; width: 220px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent2); }
+  .search-input::placeholder { color: var(--muted); }
+
+  .toggle-btn {
+    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg3); color: var(--muted); cursor: pointer;
+    font-size: 0.78rem; font-family: inherit; transition: all 0.15s;
+  }
+  .toggle-btn.on { background: rgba(248,113,113,0.15); color: var(--danger); border-color: rgba(248,113,113,0.4); }
+
+  /* SEARCH RESULT CARDS */
+  .search-result-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 18px 20px; margin-bottom: 14px;
+  }
+  .holder-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px;
+  }
+  .holder-card {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+  }
+
+  /* EMPTY */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty .big { font-size: 3rem; margin-bottom: 12px; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 18px; font-size: 0.82rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transform: translateY(80px); opacity: 0; transition: all 0.3s;
+    z-index: 999;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(74,222,128,0.4); color: var(--accent); }
+  .toast.error { border-color: rgba(248,113,113,0.4); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="icon">📊</div>
+  <div>
+    <h1>零股庫存監控</h1>
+    <p>上傳多個帳戶庫存，自動比對缺少的股票</p>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Upload -->
+  <div class="upload-section" id="dropzone">
+    <input type="file" id="fileInput" multiple accept=".xlsx,.xls,.csv">
+    <div class="upload-icon">📂</div>
+    <h2>點擊或拖曳上傳庫存檔案</h2>
+    <p>支援 .xlsx、.xls、.csv（可一次上傳多個帳戶）</p>
+  </div>
+
+  <div class="file-chips" id="fileChips"></div>
+
+  <div class="actions">
+    <button class="btn btn-primary" id="analyzeBtn" disabled onclick="analyze()">🔍 開始比對</button>
+    <button class="btn btn-secondary" onclick="clearAll()">🗑 清除全部</button>
+  </div>
+
+  <!-- Results -->
+  <div id="results"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const COLORS = ['#4ade80','#22d3ee','#a78bfa','#fb923c','#f472b6','#34d399','#60a5fa'];
+const fileMap = new Map(); // name -> {file, data, label}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = 'var(--border)'; });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.style.borderColor = 'var(--border)';
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', e => handleFiles([...e.target.files]));
+
+function handleFiles(files) {
+  files.forEach(f => {
+    if (!fileMap.has(f.name)) fileMap.set(f.name, { file: f, data: null });
+  });
+  renderChips();
+  document.getElementById('analyzeBtn').disabled = fileMap.size === 0;
+}
+
+function renderChips() {
+  const container = document.getElementById('fileChips');
+  container.innerHTML = '';
+  [...fileMap.keys()].forEach((name, i) => {
+    const c = document.createElement('div');
+    c.className = 'chip';
+    c.innerHTML = `<span class="dot" style="background:${COLORS[i % COLORS.length]}"></span>
+      <span>${name}</span>
+      <span class="remove" onclick="removeFile('${name}')">✕</span>`;
+    container.appendChild(c);
+  });
+}
+
+function removeFile(name) {
+  fileMap.delete(name);
+  renderChips();
+  document.getElementById('analyzeBtn').disabled = fileMap.size === 0;
+  if (fileMap.size === 0) document.getElementById('results').innerHTML = '';
+}
+
+function clearAll() {
+  fileMap.clear(); fileInput.value = '';
+  renderChips();
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('results').innerHTML = '';
+}
+
+function isValidStockName(str) {
+  return /[\u4e00-\u9fff\u3400-\u4dbf]/.test(str) || /[a-zA-Z]/.test(str);
+}
+
+function parseStockCell(val) {
+  val = String(val).trim();
+  let m = val.match(/^(.+?)\((\d{4,6})\)\s*$/);
+  if (m) { const n = m[1].trim(); if (isValidStockName(n)) return { code: m[2], name: n }; }
+  m = val.match(/^(\d{4,6})\s+(.+)$/);
+  if (m) { const n = m[2].trim(); if (isValidStockName(n)) return { code: m[1], name: n }; }
+  return null;
+}
+
+function findStockColumn(rows) {
+  const colCount = {};
+  rows.forEach(row => row.forEach((cell, ci) => {
+    if (parseStockCell(cell)) colCount[ci] = (colCount[ci] || 0) + 1;
+  }));
+  let best = -1, bestCount = 0;
+  Object.entries(colCount).forEach(([ci, cnt]) => { if (cnt > bestCount) { bestCount = cnt; best = Number(ci); } });
+  return best;
+}
+
+// stocks format: { code: { name, qty } }
+function extractStocksXlsx(rows) {
+  // Row 0 is header: find 商品 col and 今餘 col
+  const header = rows[0] || [];
+  const stockColIdx = header.findIndex(h => String(h).includes('商品'));
+  const qtyColIdx   = header.findIndex(h => String(h).includes('今餘'));
+  const stocks = {};
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const cellVal = stockColIdx >= 0 ? row[stockColIdx] : null;
+    const parsed = parseStockCell(cellVal);
+    if (!parsed) continue;
+    const qty = qtyColIdx >= 0 ? (Number(row[qtyColIdx]) || 0) : 0;
+    if (!stocks[parsed.code]) stocks[parsed.code] = { name: parsed.name, qty };
+  }
+  return stocks;
+}
+
+function extractStocksCsv(rows) {
+  // Row 2 is header, data from row 3
+  // Col 0 = 股票名稱 (格式: 名稱(代號)), Col 14 = 零股今餘
+  const QTY_COL = 14;
+  const stocks = {};
+  for (let i = 3; i < rows.length; i++) {
+    const row = rows[i];
+    const parsed = parseStockCell(row[0]);
+    if (!parsed) continue;
+    const qty = Number(row[QTY_COL]) || 0;
+    if (!stocks[parsed.code]) stocks[parsed.code] = { name: parsed.name, qty };
+  }
+  return stocks;
+}
+
+async function parseFile(file) {
+  const isCsv = file.name.toLowerCase().endsWith('.csv');
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    if (isCsv) {
+      reader.onload = e => {
+        const wb = XLSX.read(e.target.result, { type: 'binary', codepage: 950 });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        resolve(extractStocksCsv(rows));
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', codepage: 950 });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        resolve(extractStocksXlsx(rows));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  });
+}
+
+
+let currentTab = 'search';
+let showMissingOnly = false;
+let searchTerm = '';
+let _accounts = [], _allCodes = {}, _sortedCodes = [];
+
+function getLabel(filename) {
+  return filename.replace(/\.(xlsx|xls|csv)$/i, '').replace(/庫存.*/, '').replace(/\d{6}/, '').trim() || filename;
+}
+
+async function analyze() {
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true; btn.textContent = '⏳ 分析中...';
+
+  const accounts = [];
+  for (const [fname, obj] of fileMap.entries()) {
+    const stocks = await parseFile(obj.file);
+    accounts.push({ label: getLabel(fname), fname, stocks, color: COLORS[accounts.length % COLORS.length] });
+  }
+
+  // Build union of all codes + names
+  const allCodes = {};
+  accounts.forEach(a => {
+    Object.entries(a.stocks).forEach(([code, info]) => {
+      if (!allCodes[code]) allCodes[code] = info.name;
+    });
+  });
+
+  const sortedCodes = Object.keys(allCodes).sort();
+  renderResults(accounts, allCodes, sortedCodes);
+
+  btn.disabled = false; btn.textContent = '🔍 開始比對';
+  showToast(`✅ 完成！共 ${sortedCodes.length} 支股票`, 'success');
+}
+
+function renderResults(accounts, allCodes, sortedCodes) {
+  _accounts = accounts; _allCodes = allCodes; _sortedCodes = sortedCodes;
+  const el = document.getElementById('results');
+
+  // Summary cards
+  let summaryHTML = '<div class="summary-row">';
+  summaryHTML += `<div class="summary-card" style="border-color:#374151">
+    <div class="name">🗂 總股票數</div>
+    <div class="count" style="color:var(--accent2)">${sortedCodes.length}</div>
+    <div class="sub">所有帳戶聯集</div>
+  </div>`;
+  accounts.forEach(a => {
+    const have = Object.keys(a.stocks).length;
+    const miss = sortedCodes.filter(c => !a.stocks[c]).length;
+    summaryHTML += `<div class="summary-card" style="border-color:${a.color}33">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${a.color}"></div>
+      <div class="name">👤 ${a.label}</div>
+      <div class="count" style="color:${a.color}">${have}</div>
+      <div class="sub">持有股票數</div>
+      ${miss > 0 ? `<div class="missing-badge">缺 ${miss} 支</div>` : '<div class="ok-badge">完整</div>'}
+    </div>`;
+  });
+  summaryHTML += '</div>';
+
+  const tabs = [
+    { id: 'search',  label: '🔍 股票查詢' },
+    { id: 'matrix',  label: '📋 比對矩陣' },
+    { id: 'missing', label: '🔴 缺少清單' },
+  ];
+  accounts.forEach(a => tabs.push({ id: 'acc_' + a.label, label: `👤 ${a.label}` }));
+
+  let tabsHTML = '<div class="tabs">' + tabs.map(t =>
+    `<button class="tab${t.id === currentTab ? ' active' : ''}" onclick="switchTab('${t.id}')">${t.label}</button>`
+  ).join('') + '</div>';
+
+  el.innerHTML = summaryHTML + tabsHTML + '<div id="tabContent"></div>';
+  renderTab();
+}
+
+function switchTab(id) {
+  currentTab = id;
+  renderResults(_accounts, _allCodes, _sortedCodes);
+  document.querySelectorAll('.tab').forEach(t => {
+    const tabId = t.onclick?.toString().match(/'([^']+)'/)?.[1];
+    t.classList.toggle('active', tabId === currentTab);
+  });
+  renderTab();
+}
+
+function renderTab() {
+  const el = document.getElementById('tabContent');
+  if (!el) return;
+  if (currentTab === 'search')       renderSearch(el);
+  else if (currentTab === 'matrix')  renderMatrix(el);
+  else if (currentTab === 'missing') renderMissingAll(el);
+  else {
+    const label = currentTab.replace('acc_', '');
+    const acc = _accounts.find(a => a.label === label);
+    if (acc) renderAccountMissing(el, acc);
+  }
+}
+
+// ── Search Tab ──────────────────────────────────────────────
+let stockQuery = '';
+
+function renderSearch(el) {
+  const results = doSearch(stockQuery);
+  el.innerHTML = `
+  <div style="margin-top:18px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input id="stockQueryInput" class="search-input" style="width:280px;font-size:0.95rem"
+        placeholder="輸入股票代號或名稱..." value="${stockQuery}"
+        oninput="stockQuery=this.value;renderTab()">
+      ${stockQuery ? `<span style="color:var(--muted);font-size:0.8rem">找到 ${results.length} 筆</span>` : ''}
+    </div>
+    <div id="searchResults" style="margin-top:18px">${renderSearchResults(results)}</div>
+  </div>`;
+  // Keep focus
+  const inp = document.getElementById('stockQueryInput');
+  if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+}
+
+function doSearch(query) {
+  if (!query.trim()) return [];
+  const q = query.trim().toLowerCase();
+  return _sortedCodes.filter(code => {
+    const name = (_allCodes[code] || '').toLowerCase();
+    return code.includes(q) || name.includes(q);
+  });
+}
+
+function renderSearchResults(codes) {
+  if (!stockQuery.trim()) return `
+    <div class="empty" style="padding:40px 0">
+      <div class="big">🔎</div>
+      <p>輸入股票代號（如 2330）或名稱（如 台積電）</p>
+    </div>`;
+  if (codes.length === 0) return `
+    <div class="empty" style="padding:40px 0">
+      <div class="big">😶</div>
+      <p>找不到符合的股票</p>
+    </div>`;
+
+  return codes.map(code => {
+    const name = _allCodes[code] || '';
+    const holders = _accounts.filter(a => a.stocks[code]);
+    const missing = _accounts.filter(a => !a.stocks[code]);
+
+    const holderCards = _accounts.map(a => {
+      const info = a.stocks[code];
+      if (info) {
+        return `<div class="holder-card" style="border-color:${a.color}55">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:${a.color};font-weight:600;font-size:0.82rem">${a.label}</span>
+            <span class="ok-badge">持有</span>
+          </div>
+          <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:1.4rem;font-weight:700;color:${a.color}">${info.qty}</div>
+          <div style="font-size:0.72rem;color:var(--muted)">股（零股）</div>
+        </div>`;
+      } else {
+        return `<div class="holder-card" style="border-color:rgba(248,113,113,0.2);opacity:0.5">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:var(--muted);font-size:0.82rem">${a.label}</span>
+            <span class="missing-badge">未持有</span>
+          </div>
+          <div style="margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:1.4rem;font-weight:700;color:var(--muted)">—</div>
+          <div style="font-size:0.72rem;color:var(--muted)">尚未買入</div>
+        </div>`;
+      }
+    }).join('');
+
+    return `<div class="search-result-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <span class="code-cell" style="font-size:1.1rem">${code}</span>
+        <span style="font-size:1rem;font-weight:600">${name}</span>
+        <span style="margin-left:auto;font-size:0.78rem;color:var(--muted)">${holders.length}/${_accounts.length} 帳戶持有</span>
+      </div>
+      <div class="holder-grid">${holderCards}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Matrix Tab ──────────────────────────────────────────────
+function renderMatrix(el) {
+  const filtered = _sortedCodes.filter(code => {
+    const name = _allCodes[code] || '';
+    const matchSearch = !searchTerm || code.includes(searchTerm) || name.includes(searchTerm);
+    const hasMissing = _accounts.some(a => !a.stocks[code]);
+    return matchSearch && (!showMissingOnly || hasMissing);
+  });
+
+  el.innerHTML = `
+  <div class="filter-row">
+    <input class="search-input" placeholder="🔍 篩選代號或名稱..." oninput="searchTerm=this.value;renderTab()" value="${searchTerm}">
+    <button class="toggle-btn${showMissingOnly ? ' on' : ''}" onclick="showMissingOnly=!showMissingOnly;renderTab()">
+      ${showMissingOnly ? '✅ 只看缺少' : '☐ 只看缺少'}
+    </button>
+    <span style="color:var(--muted);font-size:0.78rem">顯示 ${filtered.length} / ${_sortedCodes.length} 支</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>代號</th><th>名稱</th>
+          ${_accounts.map(a => `<th style="color:${a.color}"><div class="header-name">${a.label}</div></th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map(code => {
+          const name = _allCodes[code] || '';
+          return `<tr>
+            <td class="code-cell">${code}</td>
+            <td>${name}</td>
+            ${_accounts.map(a => {
+              const info = a.stocks[code];
+              return info
+                ? `<td class="has" title="${info.qty}股">${info.qty > 0 ? info.qty : '✓'}</td>`
+                : `<td class="no">缺</td>`;
+            }).join('')}
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ── Missing Tabs ────────────────────────────────────────────
+function renderMissingAll(el) {
+  let html = '';
+  _accounts.forEach(a => {
+    const missing = _sortedCodes.filter(c => !a.stocks[c]);
+    if (missing.length === 0) {
+      html += `<div style="margin-bottom:24px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block"></span>
+          <strong>${a.label}</strong><span class="ok-badge">庫存完整 🎉</span>
+        </div></div>`;
+    } else {
+      html += `<div style="margin-bottom:28px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block"></span>
+          <strong>${a.label}</strong><span class="missing-badge">缺 ${missing.length} 支</span>
+        </div>
+        <div class="missing-list">
+          ${missing.map(c => `<div class="missing-item">
+            <span class="mcode">${c}</span>
+            <span class="mname">${_allCodes[c] || ''}</span>
+          </div>`).join('')}
+        </div></div>`;
+    }
+  });
+  el.innerHTML = html;
+}
+
+function renderAccountMissing(el, acc) {
+  const missing = _sortedCodes.filter(c => !acc.stocks[c]);
+  if (missing.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="big">🎉</div><p>${acc.label} 庫存完整！</p></div>`;
+    return;
+  }
+  el.innerHTML = `<div style="margin-top:16px">
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:14px">共缺 <strong style="color:var(--danger)">${missing.length}</strong> 支股票</p>
+    <div class="missing-list">
+      ${missing.map(c => `<div class="missing-item">
+        <span class="mcode">${c}</span>
+        <span class="mname">${_allCodes[c] || ''}</span>
+      </div>`).join('')}
+    </div></div>`;
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => t.className = `toast ${type}`, 2500);
+}
+</script>
+</body>
+</html>
