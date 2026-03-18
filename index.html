@@ -248,6 +248,63 @@
   .toast.show { transform: translateY(0); opacity: 1; }
   .toast.success { border-color: rgba(74,222,128,0.4); color: var(--accent); }
   .toast.error { border-color: rgba(248,113,113,0.4); color: var(--danger); }
+  /* MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.show { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; width: 580px; max-width: 95vw;
+    max-height: 80vh; overflow-y: auto;
+  }
+  .modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .modal p { font-size: 0.8rem; color: var(--muted); margin-bottom: 18px; }
+  .col-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px; margin-bottom: 20px;
+  }
+  .col-card {
+    background: var(--bg3); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .col-card:hover { border-color: var(--accent2); }
+  .col-card.selected { border-color: var(--accent); background: rgba(74,222,128,0.08); }
+  .col-card .col-header { font-size: 0.72rem; color: var(--muted); margin-bottom: 5px; }
+  .col-card .col-vals { font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; color: var(--accent2); }
+  .col-card .col-sample { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+
+  /* RECOMMEND UPLOAD */
+  .upload-section-sm {
+    background: var(--card); border: 1.5px dashed #2d3a52;
+    border-radius: 12px; padding: 20px 24px;
+    display: flex; align-items: center; gap: 16px;
+    cursor: pointer; transition: border-color 0.2s; position: relative;
+    margin-top: 16px;
+  }
+  .upload-section-sm:hover { border-color: #fbbf24; }
+  .upload-section-sm input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-section-sm .sm-icon { font-size: 1.6rem; }
+  .upload-section-sm h3 { font-size: 0.9rem; font-weight: 600; color: #fbbf24; }
+  .upload-section-sm p { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+  /* RECOMMEND CHIP */
+  .rec-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.35);
+    border-radius: 8px; padding: 6px 12px; font-size: 0.8rem; margin-top: 10px;
+  }
+  .rec-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; }
+  .rec-chip .remove { cursor: pointer; color: var(--muted); transition: color 0.15s; }
+  .rec-chip .remove:hover { color: var(--danger); }
+  .rec-chip .reconfig { cursor: pointer; color: var(--muted); font-size: 0.72rem; margin-left: 4px; transition: color 0.15s; }
+  .rec-chip .reconfig:hover { color: var(--accent2); }
 </style>
 </head>
 <body>
@@ -271,6 +328,17 @@
 
   <div class="file-chips" id="fileChips"></div>
 
+  <!-- Recommend Upload -->
+  <div class="upload-section-sm" id="recDropzone">
+    <input type="file" id="recFileInput" accept=".xlsx,.xls,.csv">
+    <div class="sm-icon">📌</div>
+    <div>
+      <h3>上傳建議清單（選填）</h3>
+      <p>任意格式皆可，上傳後自行選擇代號欄位</p>
+    </div>
+  </div>
+  <div id="recChipArea"></div>
+
   <div class="actions">
     <button class="btn btn-primary" id="analyzeBtn" disabled onclick="analyze()">🔍 開始比對</button>
     <button class="btn btn-secondary" onclick="clearAll()">🗑 清除全部</button>
@@ -278,6 +346,19 @@
 
   <!-- Results -->
   <div id="results"></div>
+</div>
+
+<!-- Column Picker Modal -->
+<div class="modal-overlay" id="colModal">
+  <div class="modal">
+    <h3>📌 選擇股票代號欄位</h3>
+    <p>點選一個或多個含有股票代號（4~6位數字）的欄位，程式會自動從中擷取代號。</p>
+    <div class="col-grid" id="colGrid"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeColModal()">取消</button>
+      <button class="btn btn-primary" id="colConfirmBtn" onclick="confirmColSelection()">確認選擇</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -477,6 +558,7 @@ function renderResults(accounts, allCodes, sortedCodes) {
     { id: 'matrix',  label: '📋 比對矩陣' },
     { id: 'missing', label: '🔴 缺少清單' },
   ];
+  if (Object.keys(recStocks).length > 0) tabs.splice(1, 0, { id: 'recommend', label: '📌 建議清單比對' });
   accounts.forEach(a => tabs.push({ id: 'acc_' + a.label, label: `👤 ${a.label}` }));
 
   let tabsHTML = '<div class="tabs">' + tabs.map(t =>
@@ -500,9 +582,10 @@ function switchTab(id) {
 function renderTab() {
   const el = document.getElementById('tabContent');
   if (!el) return;
-  if (currentTab === 'search')       renderSearch(el);
-  else if (currentTab === 'matrix')  renderMatrix(el);
-  else if (currentTab === 'missing') renderMissingAll(el);
+  if (currentTab === 'search')           renderSearch(el);
+  else if (currentTab === 'recommend')   renderRecommend(el);
+  else if (currentTab === 'matrix')      renderMatrix(el);
+  else if (currentTab === 'missing')     renderMissingAll(el);
   else {
     const label = currentTab.replace('acc_', '');
     const acc = _accounts.find(a => a.label === label);
@@ -590,7 +673,80 @@ function renderSearchResults(codes) {
   }).join('');
 }
 
-// ── Matrix Tab ──────────────────────────────────────────────
+// ── Recommend Tab ────────────────────────────────────────────
+function renderRecommend(el) {
+  const recCodes = Object.keys(recStocks).sort();
+  const total = recCodes.length;
+
+  // Per-account stats
+  const accountRows = _accounts.map(a => {
+    const have = recCodes.filter(c => a.stocks[c]);
+    const miss = recCodes.filter(c => !a.stocks[c]);
+    return { ...a, have, miss };
+  });
+
+  // Summary row
+  let html = `<div style="margin-top:18px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="background:var(--card);border:1px solid #fbbf2455;border-radius:10px;padding:12px 18px;min-width:130px">
+        <div style="font-size:0.72rem;color:var(--muted)">📌 建議清單總計</div>
+        <div style="font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#fbbf24">${total}</div>
+        <div style="font-size:0.72rem;color:var(--muted)">支股票</div>
+      </div>
+      ${accountRows.map(a => `
+        <div style="background:var(--card);border:1px solid ${a.color}33;border-radius:10px;padding:12px 18px;position:relative;min-width:130px;overflow:hidden">
+          <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${a.color}"></div>
+          <div style="font-size:0.72rem;color:var(--muted)">👤 ${a.label}</div>
+          <div style="font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:${a.color}">${a.have.length}<span style="font-size:0.9rem;color:var(--muted)">/${total}</span></div>
+          <div style="font-size:0.72rem;color:var(--muted)">已持有</div>
+          ${a.miss.length > 0 ? `<div class="missing-badge" style="margin-top:6px">缺 ${a.miss.length} 支</div>` : '<div class="ok-badge" style="margin-top:6px">完整 🎉</div>'}
+        </div>`).join('')}
+    </div>`;
+
+  // Full comparison table
+  html += `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>代號</th><th>名稱</th>
+      ${_accounts.map(a => `<th style="color:${a.color}">${a.label}</th>`).join('')}
+    </tr></thead>
+    <tbody>
+    ${recCodes.map(code => {
+      const name = recStocks[code] || _allCodes[code] || '';
+      return `<tr>
+        <td class="code-cell">${code}</td>
+        <td>${name}</td>
+        ${_accounts.map(a => {
+          const info = a.stocks[code];
+          return info
+            ? `<td class="has" title="${info.qty}股">${info.qty > 0 ? info.qty : '✓'}</td>`
+            : `<td class="no">缺</td>`;
+        }).join('')}
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+
+  // Per-account missing details
+  html += `<div style="margin-top:28px">`;
+  accountRows.forEach(a => {
+    if (a.miss.length === 0) return;
+    html += `<div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block"></span>
+        <strong>${a.label}</strong> 還沒買的建議股
+        <span class="missing-badge">缺 ${a.miss.length} 支</span>
+      </div>
+      <div class="missing-list">
+        ${a.miss.map(c => `<div class="missing-item">
+          <span class="mcode">${c}</span>
+          <span class="mname">${recStocks[c] || _allCodes[c] || ''}</span>
+        </div>`).join('')}
+      </div></div>`;
+  });
+  html += `</div></div>`;
+  el.innerHTML = html;
+}
+
+
 function renderMatrix(el) {
   const filtered = _sortedCodes.filter(code => {
     const name = _allCodes[code] || '';
@@ -678,6 +834,175 @@ function renderAccountMissing(el, acc) {
     </div></div>`;
 }
 
+// ── Recommendation List ──────────────────────────────────────
+let recFile = null;
+let recRows = [];
+let recSelectedCols = [];
+let recStocks = {}; // { code: name }
+let recLabel = '';
+
+const recDropzone = document.getElementById('recDropzone');
+const recFileInput = document.getElementById('recFileInput');
+
+recDropzone.addEventListener('dragover', e => { e.preventDefault(); recDropzone.style.borderColor = '#fbbf24'; });
+recDropzone.addEventListener('dragleave', () => { recDropzone.style.borderColor = '#2d3a52'; });
+recDropzone.addEventListener('drop', e => {
+  e.preventDefault(); recDropzone.style.borderColor = '#2d3a52';
+  if (e.dataTransfer.files[0]) handleRecFile(e.dataTransfer.files[0]);
+});
+recFileInput.addEventListener('change', e => { if (e.target.files[0]) handleRecFile(e.target.files[0]); });
+
+async function handleRecFile(file) {
+  recFile = file;
+  recLabel = file.name.replace(/\.(xlsx|xls|csv)$/i, '').trim();
+  const isCsv = file.name.toLowerCase().endsWith('.csv');
+  recRows = await new Promise(resolve => {
+    const reader = new FileReader();
+    if (isCsv) {
+      reader.onload = e => {
+        const wb = XLSX.read(e.target.result, { type: 'binary', codepage: 950 });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
+      };
+      reader.readAsBinaryString(file);
+    } else {
+      reader.onload = e => {
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', codepage: 950 });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  });
+  openColModal();
+}
+
+function openColModal() {
+  // Auto-detect columns that look like stock codes (4~6 digit numbers)
+  const colData = {};
+  const maxRows = Math.min(recRows.length, 50);
+  const numCols = Math.max(...recRows.slice(0, maxRows).map(r => r.length));
+
+  for (let ci = 0; ci < numCols; ci++) {
+    const vals = [];
+    const codeVals = [];
+    for (let ri = 0; ri < maxRows; ri++) {
+      const v = String(recRows[ri]?.[ci] ?? '').trim();
+      if (v && v !== 'NaN') {
+        vals.push(v);
+        if (/^\d{4,6}$/.test(v)) codeVals.push(v);
+      }
+    }
+    if (codeVals.length >= 3) {
+      colData[ci] = { vals, codeVals };
+    }
+  }
+
+  // Also try to find header row
+  let headerRow = recRows[0] || [];
+  if (headerRow.every(v => !v || String(v).startsWith('Unnamed'))) headerRow = recRows[1] || [];
+
+  const grid = document.getElementById('colGrid');
+  grid.innerHTML = '';
+  recSelectedCols = [];
+
+  Object.entries(colData).forEach(([ci, { vals, codeVals }]) => {
+    ci = Number(ci);
+    const header = String(headerRow[ci] || `欄 ${ci + 1}`).replace(/Unnamed.*/, `欄 ${ci + 1}`);
+    const preview = codeVals.slice(0, 4).join(', ');
+    // Try to find adjacent name column
+    const nameColVals = [];
+    for (let ri = 0; ri < Math.min(recRows.length, 30); ri++) {
+      const nameVal = String(recRows[ri]?.[ci + 1] ?? '').trim();
+      if (nameVal && isValidStockName(nameVal)) nameColVals.push(nameVal);
+    }
+    const namePreview = nameColVals.slice(0, 3).join('、');
+
+    const card = document.createElement('div');
+    card.className = 'col-card';
+    card.dataset.ci = ci;
+    card.innerHTML = `
+      <div class="col-header">${header}</div>
+      <div class="col-vals">${preview}…</div>
+      ${namePreview ? `<div class="col-sample">旁欄：${namePreview}</div>` : ''}
+      <div style="font-size:0.7rem;color:var(--muted);margin-top:4px">${codeVals.length} 筆代號</div>`;
+    card.onclick = () => {
+      card.classList.toggle('selected');
+      const idx = recSelectedCols.indexOf(ci);
+      if (idx >= 0) recSelectedCols.splice(idx, 1);
+      else recSelectedCols.push(ci);
+      document.getElementById('colConfirmBtn').disabled = recSelectedCols.length === 0;
+    };
+    grid.appendChild(card);
+
+    // Auto-select if only one candidate
+    if (Object.keys(colData).length === 1) {
+      card.classList.add('selected');
+      recSelectedCols.push(ci);
+    }
+  });
+
+  if (Object.keys(colData).length === 0) {
+    grid.innerHTML = `<div style="color:var(--muted);font-size:0.85rem;grid-column:1/-1">
+      找不到含有股票代號（4~6位數字）的欄位，請確認檔案內容。</div>`;
+  }
+
+  document.getElementById('colConfirmBtn').disabled = recSelectedCols.length === 0;
+  document.getElementById('colModal').classList.add('show');
+}
+
+function closeColModal() {
+  document.getElementById('colModal').classList.remove('show');
+}
+
+function confirmColSelection() {
+  // Extract codes + try to grab adjacent name column
+  recStocks = {};
+  recRows.forEach(row => {
+    recSelectedCols.forEach(ci => {
+      const v = String(row[ci] ?? '').trim();
+      if (/^\d{4,6}$/.test(v)) {
+        if (!recStocks[v]) {
+          // Look for name in adjacent cols (ci-1, ci+1)
+          let name = '';
+          for (const ni of [ci + 1, ci - 1, ci + 2]) {
+            const nv = String(row[ni] ?? '').trim();
+            if (isValidStockName(nv)) { name = nv; break; }
+          }
+          recStocks[v] = name;
+        }
+      }
+      // Also handle "代號 名稱" format in same cell
+      const parsed = parseStockCell(v);
+      if (parsed && !recStocks[parsed.code]) recStocks[parsed.code] = parsed.name;
+    });
+  });
+
+  closeColModal();
+  renderRecChip();
+
+  // If analysis already done, refresh results
+  if (_accounts.length > 0) renderResults(_accounts, _allCodes, _sortedCodes);
+  showToast(`✅ 建議清單載入完成，共 ${Object.keys(recStocks).length} 支`, 'success');
+}
+
+function removeRecFile() {
+  recFile = null; recRows = []; recSelectedCols = []; recStocks = {}; recLabel = '';
+  recFileInput.value = '';
+  document.getElementById('recChipArea').innerHTML = '';
+  if (_accounts.length > 0) renderResults(_accounts, _allCodes, _sortedCodes);
+}
+
+function renderRecChip() {
+  const count = Object.keys(recStocks).length;
+  document.getElementById('recChipArea').innerHTML = `
+    <div class="rec-chip">
+      <span class="dot"></span>
+      <span>📌 ${recLabel} <strong style="color:#fbbf24">${count} 支</strong></span>
+      <span class="reconfig" onclick="openColModal()">⚙ 重新選欄</span>
+      <span class="remove" onclick="removeRecFile()">✕</span>
+    </div>`;
+}
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
