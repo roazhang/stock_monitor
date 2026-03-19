@@ -232,7 +232,60 @@
     border-radius: 10px; padding: 12px 14px;
   }
 
-  /* EMPTY */
+  /* ORDER MODAL */
+  .order-modal {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; width: 700px; max-width: 96vw;
+    max-height: 88vh; overflow-y: auto;
+  }
+  .order-section { margin-bottom: 20px; }
+  .order-section label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+  .order-input {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; color: var(--text); font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem; width: 100%; outline: none; transition: border-color 0.15s;
+  }
+  .order-input:focus { border-color: var(--accent2); }
+  .order-input::placeholder { color: var(--muted); }
+  .account-rows { display: flex; flex-direction: column; gap: 8px; }
+  .account-row {
+    display: grid; grid-template-columns: 1fr 80px; gap: 8px; align-items: center;
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  }
+  .account-row .acc-name { font-size: 0.8rem; color: var(--accent2); font-family: 'JetBrains Mono', monospace; }
+  .account-row .acc-remove { cursor: pointer; color: var(--muted); font-size: 0.8rem; text-align: right; }
+  .account-row .acc-remove:hover { color: var(--danger); }
+  .csv-output {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+    color: var(--accent); white-space: pre; overflow-x: auto; max-height: 220px;
+    overflow-y: auto; line-height: 1.6; margin-top: 8px;
+    width: 100%; box-sizing: border-box; outline: none;
+  }
+  .csv-output:focus { border-color: var(--accent2); }
+  .stock-tag-area {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; min-height: 36px;
+  }
+  .stock-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3);
+    border-radius: 6px; padding: 3px 10px; font-size: 0.78rem; font-family: 'JetBrains Mono', monospace;
+    color: var(--accent2);
+  }
+  .stock-tag .rm { cursor: pointer; color: var(--muted); transition: color 0.1s; }
+  .stock-tag .rm:hover { color: var(--danger); }
+  .copy-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3);
+    border-radius: 8px; padding: 8px 16px; color: var(--accent);
+    font-size: 0.82rem; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: all 0.15s; margin-top: 10px;
+  }
+  .copy-btn:hover { background: rgba(74,222,128,0.22); }
+  .copy-btn.copied { background: rgba(74,222,128,0.25); color: #6ee7a0; }
+  .input-row { display: flex; gap: 8px; }
+  .input-row .order-input { flex: 1; }
+
   .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
   .empty .big { font-size: 3rem; margin-bottom: 12px; }
 
@@ -342,6 +395,7 @@
   <div class="actions">
     <button class="btn btn-primary" id="analyzeBtn" disabled onclick="analyze()">🔍 開始比對</button>
     <button class="btn btn-secondary" onclick="clearAll()">🗑 清除全部</button>
+    <button class="btn btn-secondary" onclick="openOrderModal()" style="border-color:rgba(251,191,36,0.4);color:#fbbf24">📋 批次下單範本</button>
   </div>
 
   <!-- Results -->
@@ -357,6 +411,113 @@
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeColModal()">取消</button>
       <button class="btn btn-primary" id="colConfirmBtn" onclick="confirmColSelection()">確認選擇</button>
+    </div>
+  </div>
+</div>
+
+<!-- Order Template Modal -->
+<div class="modal-overlay" id="orderModal">
+  <div class="order-modal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <h3 style="font-size:1.05rem;font-weight:700">📋 批次下單範本產生器</h3>
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:3px">產生各券商批次下單檔案</p>
+      </div>
+      <button class="btn btn-secondary" style="padding:6px 14px" onclick="closeOrderModal()">✕ 關閉</button>
+    </div>
+
+    <!-- 券商切換 -->
+    <div style="display:flex;gap:6px;margin-bottom:20px">
+      <button id="tabYongfeng" onclick="switchBroker('yongfeng')"
+        style="padding:7px 18px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:0.82rem;cursor:pointer;background:var(--bg3);color:var(--text);transition:all 0.15s"
+        class="broker-tab active-broker">永豐 CSV</button>
+      <button id="tabCathay" onclick="switchBroker('cathay')"
+        style="padding:7px 18px;border-radius:8px;border:1px solid var(--border);font-family:inherit;font-size:0.82rem;cursor:pointer;background:transparent;color:var(--muted);transition:all 0.15s"
+        class="broker-tab">國泰 XML</button>
+    </div>
+
+    <!-- 永豐區塊 -->
+    <div id="brokerYongfeng">
+      <!-- 帳號設定 -->
+      <div class="order-section">
+        <label>📂 帳號設定（可新增多個帳號）</label>
+        <div class="input-row" style="margin-bottom:8px">
+          <input class="order-input" id="newAccInput" placeholder="貼上帳號，例如：AB1C   0123456" onkeydown="if(event.key==='Enter')addAccount()">
+          <button class="btn btn-secondary" style="white-space:nowrap" onclick="addAccount()">＋ 新增</button>
+        </div>
+        <div class="account-rows" id="accountRows"></div>
+      </div>
+
+      <!-- 股票代號 -->
+      <div class="order-section">
+        <label>📌 要買的股票代號（空格、逗號或換行分隔）</label>
+        <div class="input-row">
+          <textarea class="order-input" id="stockCodesInput" rows="3"
+            placeholder="例如：1101 1103 2330"
+            oninput="parseStockInput(this.value)" style="resize:vertical"></textarea>
+        </div>
+        <div class="stock-tag-area" id="stockTags"></div>
+      </div>
+
+      <!-- 預覽 -->
+      <div class="order-section">
+        <label>👁 CSV 預覽 <span style="color:var(--muted);font-weight:400">（點框全選，直接複製貼入永豐）</span></label>
+        <textarea class="csv-output" id="csvPreview" readonly onclick="this.select()"
+          style="width:100%;min-height:160px;resize:vertical;cursor:text;user-select:text;-webkit-user-select:text"
+        >— 請先設定帳號與股票代號 —</textarea>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+          <button class="copy-btn" id="copyBtn" onclick="copyCsv()">📋 一鍵複製</button>
+          <button class="copy-btn" onclick="selectAllCsv()" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.3);color:#a78bfa">☰ 全選文字</button>
+          <button class="copy-btn" onclick="downloadCsv()" style="background:rgba(34,211,238,0.1);border-color:rgba(34,211,238,0.3);color:var(--accent2)">⬇ 下載 CSV</button>
+          <span id="csvRowCount" style="color:var(--muted);font-size:0.78rem;margin-left:auto"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 國泰區塊 -->
+    <div id="brokerCathay" style="display:none">
+      <!-- 帳號資訊 -->
+      <div class="order-section">
+        <label>📂 國泰帳號資訊</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">DealAcc（例：CTYAP_1234-5678901_1）</div>
+            <input class="order-input" id="cathayDealAcc" placeholder="例：CTYAP_1234-5678901_1" oninput="generateXml()">
+          </div>
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">DealAccUI（例：證-1234-5678901-王小明）</div>
+            <input class="order-input" id="cathayDealAccUI" placeholder="例：證-1234-5678901-王小明" oninput="generateXml()">
+          </div>
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:4px">SSID（例：P123456789）</div>
+            <input class="order-input" id="cathaySSID" placeholder="例：P123456789" oninput="generateXml()">
+          </div>
+        </div>
+      </div>
+
+      <!-- 股票代號 -->
+      <div class="order-section">
+        <label>📌 要買的股票代號（空格、逗號或換行分隔）</label>
+        <div class="input-row">
+          <textarea class="order-input" id="cathayCodesInput" rows="3"
+            placeholder="例如：0050 1101 2330"
+            oninput="parseCathayInput(this.value)" style="resize:vertical"></textarea>
+        </div>
+        <div class="stock-tag-area" id="cathayStockTags"></div>
+      </div>
+
+      <!-- 預覽 -->
+      <div class="order-section">
+        <label>👁 XML 預覽 <span style="color:var(--muted);font-weight:400">（點框全選複製，或直接下載 .xml）</span></label>
+        <textarea class="csv-output" id="xmlPreview" readonly onclick="this.select()"
+          style="width:100%;min-height:160px;resize:vertical;cursor:text;user-select:text;-webkit-user-select:text;color:#a78bfa"
+        >— 請先填入帳號資訊與股票代號 —</textarea>
+        <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center">
+          <button class="copy-btn" id="copyXmlBtn" onclick="copyXml()" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.3);color:#a78bfa">📋 一鍵複製 XML</button>
+          <button class="copy-btn" onclick="downloadXml()" style="background:rgba(34,211,238,0.1);border-color:rgba(34,211,238,0.3);color:var(--accent2)">⬇ 下載 XML</button>
+          <span id="xmlRowCount" style="color:var(--muted);font-size:0.78rem;margin-left:auto"></span>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -729,16 +890,19 @@ function renderRecommend(el) {
   html += `<div style="margin-top:28px">`;
   accountRows.forEach(a => {
     if (a.miss.length === 0) return;
+    const codesJson = JSON.stringify(a.miss);
     html += `<div style="margin-bottom:24px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
         <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block"></span>
         <strong>${a.label}</strong> 還沒買的建議股
         <span class="missing-badge">缺 ${a.miss.length} 支</span>
+        <button onclick='addCodesToOrder(${codesJson});openOrderModal()' style="margin-left:auto;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:6px;padding:4px 12px;font-size:0.75rem;cursor:pointer;font-family:inherit">📋 全部加入下單</button>
       </div>
       <div class="missing-list">
         ${a.miss.map(c => `<div class="missing-item">
           <span class="mcode">${c}</span>
           <span class="mname">${recStocks[c] || _allCodes[c] || ''}</span>
+          <span onclick='addCodesToOrder(["${c}"]);openOrderModal()' style="margin-left:auto;cursor:pointer;font-size:0.7rem;color:var(--muted)" title="加入下單">📋</span>
         </div>`).join('')}
       </div></div>`;
   });
@@ -802,15 +966,18 @@ function renderMissingAll(el) {
           <strong>${a.label}</strong><span class="ok-badge">庫存完整 🎉</span>
         </div></div>`;
     } else {
+      const codesJson = JSON.stringify(missing);
       html += `<div style="margin-bottom:28px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
           <span style="width:12px;height:12px;border-radius:50%;background:${a.color};display:inline-block"></span>
           <strong>${a.label}</strong><span class="missing-badge">缺 ${missing.length} 支</span>
+          <button onclick='addCodesToOrder(${codesJson});openOrderModal()' style="margin-left:auto;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:6px;padding:4px 12px;font-size:0.75rem;cursor:pointer;font-family:inherit">📋 全部加入下單</button>
         </div>
         <div class="missing-list">
           ${missing.map(c => `<div class="missing-item">
             <span class="mcode">${c}</span>
             <span class="mname">${_allCodes[c] || ''}</span>
+            <span onclick='addCodesToOrder(["${c}"]);openOrderModal()' style="margin-left:auto;cursor:pointer;font-size:0.7rem;color:var(--muted)" title="加入下單">📋</span>
           </div>`).join('')}
         </div></div>`;
     }
@@ -824,12 +991,17 @@ function renderAccountMissing(el, acc) {
     el.innerHTML = `<div class="empty"><div class="big">🎉</div><p>${acc.label} 庫存完整！</p></div>`;
     return;
   }
+  const codesJson = JSON.stringify(missing);
   el.innerHTML = `<div style="margin-top:16px">
-    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:14px">共缺 <strong style="color:var(--danger)">${missing.length}</strong> 支股票</p>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <p style="color:var(--muted);font-size:0.82rem">共缺 <strong style="color:var(--danger)">${missing.length}</strong> 支股票</p>
+      <button onclick='addCodesToOrder(${codesJson});openOrderModal()' style="margin-left:auto;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:6px;padding:4px 12px;font-size:0.75rem;cursor:pointer;font-family:inherit">📋 全部加入下單</button>
+    </div>
     <div class="missing-list">
       ${missing.map(c => `<div class="missing-item">
         <span class="mcode">${c}</span>
         <span class="mname">${_allCodes[c] || ''}</span>
+        <span onclick='addCodesToOrder(["${c}"]);openOrderModal()' style="margin-left:auto;cursor:pointer;font-size:0.7rem;color:var(--muted)" title="加入下單">📋</span>
       </div>`).join('')}
     </div></div>`;
 }
@@ -1003,6 +1175,281 @@ function renderRecChip() {
       <span class="remove" onclick="removeRecFile()">✕</span>
     </div>`;
 }
+// ── Order Template ────────────────────────────────────────────
+let orderAccounts = [];
+let orderCodes = []; // array of stock codes to buy
+
+function openOrderModal() {
+  document.getElementById('orderModal').classList.add('show');
+  renderAccountRows();
+  generateCsv();
+}
+function closeOrderModal() {
+  document.getElementById('orderModal').classList.remove('show');
+}
+
+function renderAccountRows() {
+  const el = document.getElementById('accountRows');
+  if (orderAccounts.length === 0) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:0.8rem;padding:8px">尚未設定帳號</div>`;
+    return;
+  }
+  el.innerHTML = orderAccounts.map((a, i) => `
+    <div class="account-row">
+      <span class="acc-name">${a.id}</span>
+      <span class="acc-remove" onclick="removeAccount(${i})">✕ 移除</span>
+    </div>`).join('');
+}
+
+function addAccount() {
+  const val = document.getElementById('newAccInput').value.trim();
+  if (!val) return;
+  if (orderAccounts.find(a => a.id === val)) { showToast('帳號已存在', 'error'); return; }
+  orderAccounts.push({ id: val });
+  document.getElementById('newAccInput').value = '';
+  renderAccountRows();
+  generateCsv();
+}
+
+function removeAccount(i) {
+  orderAccounts.splice(i, 1);
+  renderAccountRows();
+  generateCsv();
+}
+
+function parseStockInput(val) {
+  // Split by space, comma, newline, semicolon
+  const tokens = val.split(/[\s,;\n]+/).map(t => t.trim()).filter(t => /^\d{4,6}$/.test(t));
+  // Deduplicate preserving order
+  orderCodes = [...new Set(tokens)];
+  renderStockTags();
+  generateCsv();
+}
+
+function removeOrderCode(code) {
+  orderCodes = orderCodes.filter(c => c !== code);
+  renderStockTags();
+  generateCsv();
+}
+
+function renderStockTags() {
+  const el = document.getElementById('stockTags');
+  if (orderCodes.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = orderCodes.map(c => {
+    const name = _allCodes[c] || '';
+    return `<span class="stock-tag">${c}${name ? ' ' + name : ''}<span class="rm" onclick="removeOrderCode('${c}')">✕</span></span>`;
+  }).join('');
+}
+
+function buildCsvRows() {
+  // Fixed format: 帳號,股票代號,B,1,2,10.75, ,1,0,S
+  // Only col0 (帳號) and col1 (股票代號) change
+  const rows = [];
+  orderAccounts.forEach(acc => {
+    orderCodes.forEach(code => {
+      rows.push([acc.id, code, 'B', '1', '2', '10.75', ' ', '1', '0', 'S'].join(','));
+    });
+  });
+  return rows;
+}
+
+function generateCsv() {
+  const el = document.getElementById('csvPreview');
+  const countEl = document.getElementById('csvRowCount');
+  if (!el) return;
+  if (orderAccounts.length === 0 || orderCodes.length === 0) {
+    el.value = '— 請先設定帳號與股票代號 —';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  const rows = buildCsvRows();
+  el.value = rows.join('\n');
+  if (countEl) countEl.textContent = `共 ${rows.length} 筆（${orderAccounts.length} 帳號 × ${orderCodes.length} 支）`;
+}
+
+function selectAllCsv() {
+  const el = document.getElementById('csvPreview');
+  if (!el) return;
+  el.focus();
+  el.select();
+}
+
+function copyCsv() {
+  const rows = buildCsvRows();
+  if (rows.length === 0) { showToast('沒有資料可複製', 'error'); return; }
+  const text = rows.join('\n');
+  const btn = document.getElementById('copyBtn');
+
+  // Try clipboard API first, fallback to select+copy
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✅ 已複製！'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋 一鍵複製'; btn.classList.remove('copied'); }, 2000);
+      showToast(`✅ 已複製 ${rows.length} 筆下單資料`, 'success');
+    }).catch(() => fallbackCopy(text, btn, rows.length));
+  } else {
+    fallbackCopy(text, btn, rows.length);
+  }
+}
+
+function fallbackCopy(text, btn, count) {
+  const el = document.getElementById('csvPreview');
+  el.focus(); el.select();
+  try {
+    document.execCommand('copy');
+    btn.textContent = '✅ 已複製！'; btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '📋 一鍵複製'; btn.classList.remove('copied'); }, 2000);
+    showToast(`✅ 已複製 ${count} 筆下單資料`, 'success');
+  } catch {
+    showToast('請手動全選（Ctrl+A）後複製', 'error');
+  }
+}
+
+function downloadCsv() {
+  const rows = buildCsvRows();
+  if (rows.length === 0) { showToast('沒有資料可下載', 'error'); return; }
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `批次下單_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`✅ 已下載 ${rows.length} 筆下單資料`, 'success');
+}
+
+
+// ── Broker Tab Switch ─────────────────────────────────────────
+let currentBroker = 'yongfeng';
+
+function switchBroker(broker) {
+  currentBroker = broker;
+  document.getElementById('brokerYongfeng').style.display = broker === 'yongfeng' ? '' : 'none';
+  document.getElementById('brokerCathay').style.display   = broker === 'cathay'   ? '' : 'none';
+  document.querySelectorAll('.broker-tab').forEach(t => {
+    const isActive = t.id === 'tab' + broker.charAt(0).toUpperCase() + broker.slice(1);
+    t.style.background     = isActive ? 'var(--bg3)' : 'transparent';
+    t.style.color          = isActive ? 'var(--text)' : 'var(--muted)';
+    t.style.borderColor    = isActive ? 'var(--accent2)' : 'var(--border)';
+  });
+}
+
+// ── Cathay XML ────────────────────────────────────────────────
+let cathayCodes = [];
+
+function parseCathayInput(val) {
+  const tokens = val.split(/[\s,;\n]+/).map(t => t.trim()).filter(t => /^\d{4,6}$/.test(t));
+  cathayCodes = [...new Set(tokens)];
+  renderCathayTags();
+  generateXml();
+}
+
+function removeCathayCode(code) {
+  cathayCodes = cathayCodes.filter(c => c !== code);
+  renderCathayTags();
+  generateXml();
+}
+
+function renderCathayTags() {
+  const el = document.getElementById('cathayStockTags');
+  if (!el) return;
+  el.innerHTML = cathayCodes.map(c => {
+    const name = _allCodes[c] || '';
+    return `<span class="stock-tag">${c}${name ? ' ' + name : ''}<span class="rm" onclick="removeCathayCode('${c}')">✕</span></span>`;
+  }).join('');
+}
+
+function buildXml() {
+  const dealAcc   = document.getElementById('cathayDealAcc')?.value.trim()   || '';
+  const dealAccUI = document.getElementById('cathayDealAccUI')?.value.trim()  || '';
+  const ssid      = document.getElementById('cathaySSID')?.value.trim()       || '';
+
+  // Auto-extract TSID from DealAcc prefix (e.g. "CTYAP_1234-5678901_1" → "CTYAP")
+  const tsid = dealAcc.split('_')[0] || 'CTYAP';
+
+  const CRLF = '\r\n';
+  const orders = cathayCodes.map(code => {
+    const name = (_allCodes[code] || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return `\t\t<Order Vol="1" VolMatch="0" VolCancel="0" ActionFlag="0" OrderStatus="0" DP="0" SettleCurrency="0" Price="0.000000" BS="B" Cond="R" DealType="0" TT="11" OT="0" PT="1" Offset="5" Session="999" OFT="18" DealTime="1773849600" OrderDateTime="-1" ConfirmDateTime="-1" ID="${code}.TW" ID2="" Name="${name}" TSID="${tsid}" EmergeBroker="" EmergeBrokerName="" CreatorAcc="" DealAcc="${dealAcc}" DealAccUI="${dealAccUI}" SSID="${ssid}" IBPT="999" IBCond="999" PriceStop="0.000000" ETT="-1" GTCRule="0" GTCStartTime="0" GTCStopDate="0" GTCStopPrice="0.000000" GTCWebID="" GTCWebSeq="" ChkUI="-1"/>`;
+  }).join(CRLF);
+
+  // Declaration must match actual encoding — we output UTF-8, so declare UTF-8
+  return `<?xml version="1.0" encoding="UTF-8"?>${CRLF}<MdjOrdersFile CompactMode="1">${CRLF}\t<Orders>${CRLF}${orders}${CRLF}\t</Orders>${CRLF}</MdjOrdersFile>${CRLF}`;
+}
+
+function generateXml() {
+  const el = document.getElementById('xmlPreview');
+  const countEl = document.getElementById('xmlRowCount');
+  if (!el) return;
+  const dealAcc = document.getElementById('cathayDealAcc')?.value.trim();
+  if (!dealAcc || cathayCodes.length === 0) {
+    el.value = '— 請先填入帳號資訊與股票代號 —';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+  el.value = buildXml();
+  if (countEl) countEl.textContent = `共 ${cathayCodes.length} 筆`;
+}
+
+function copyXml() {
+  const xml = buildXml();
+  const btn = document.getElementById('copyXmlBtn');
+  if (cathayCodes.length === 0) { showToast('沒有資料可複製', 'error'); return; }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(xml).then(() => {
+      btn.textContent = '✅ 已複製！'; 
+      setTimeout(() => btn.textContent = '📋 一鍵複製 XML', 2000);
+      showToast(`✅ 已複製 ${cathayCodes.length} 筆 XML`, 'success');
+    }).catch(() => fallbackCopyEl('xmlPreview', btn, cathayCodes.length, '國泰 XML'));
+  } else {
+    fallbackCopyEl('xmlPreview', btn, cathayCodes.length, '國泰 XML');
+  }
+}
+
+function fallbackCopyEl(elId, btn, count, label) {
+  const el = document.getElementById(elId);
+  el.focus(); el.select();
+  try {
+    document.execCommand('copy');
+    btn.textContent = '✅ 已複製！';
+    setTimeout(() => btn.textContent = `📋 一鍵複製 ${label}`, 2000);
+    showToast(`✅ 已複製 ${count} 筆`, 'success');
+  } catch { showToast('請手動全選後複製', 'error'); }
+}
+
+function downloadXml() {
+  if (cathayCodes.length === 0) { showToast('沒有資料可下載', 'error'); return; }
+  const xml = buildXml();
+  // Encode as big5 via Blob with UTF-8 but filename indicates big5
+  const blob = new Blob([xml], { type: 'text/xml;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `國泰批次下單_${new Date().toISOString().slice(0,10)}.xml`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`✅ 已下載 ${cathayCodes.length} 筆 XML`, 'success');
+}
+
+// Override addCodesToOrder to also populate cathay input if on cathay tab
+const _origAddCodes = addCodesToOrder;
+function addCodesToOrder(codes) {
+  // Add to yongfeng list
+  codes.forEach(c => { if (!orderCodes.includes(c)) orderCodes.push(c); });
+  // Also add to cathay list
+  codes.forEach(c => { if (!cathayCodes.includes(c)) cathayCodes.push(c); });
+  // Sync textarea values
+  const yEl = document.getElementById('stockCodesInput');
+  if (yEl) yEl.value = orderCodes.join(' ');
+  const cEl = document.getElementById('cathayCodesInput');
+  if (cEl) cEl.value = cathayCodes.join(' ');
+  renderStockTags();
+  renderCathayTags();
+  generateCsv();
+  generateXml();
+  showToast(`已加入 ${codes.length} 支股票到下單清單`, 'success');
+}
+
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
