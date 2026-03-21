@@ -647,6 +647,7 @@ async function parseFile(file) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     if (isCsv) {
+      // CSV 是 Big5 編碼，需要 codepage:950
       reader.onload = e => {
         const wb = XLSX.read(e.target.result, { type: 'binary', codepage: 950 });
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -655,9 +656,10 @@ async function parseFile(file) {
       };
       reader.readAsBinaryString(file);
     } else {
+      // XLSX 內部是 UTF-8（ZIP+XML），不需要也不可加 codepage，加了反而會亂碼
       reader.onload = e => {
         const data = new Uint8Array(e.target.result);
-        const wb = XLSX.read(data, { type: 'array', codepage: 950 });
+        const wb = XLSX.read(data, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
         resolve(extractStocksXlsx(rows));
@@ -1051,7 +1053,7 @@ async function handleRecFile(file) {
       reader.readAsBinaryString(file);
     } else {
       reader.onload = e => {
-        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', codepage: 950 });
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
       };
