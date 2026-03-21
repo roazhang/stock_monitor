@@ -1048,6 +1048,7 @@ async function handleRecFile(file) {
       reader.onload = e => {
         const wb = XLSX.read(e.target.result, { type: 'binary', codepage: 950 });
         const ws = wb.Sheets[wb.SheetNames[0]];
+        // raw:false for CSV to get proper string values
         resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
       };
       reader.readAsBinaryString(file);
@@ -1055,7 +1056,8 @@ async function handleRecFile(file) {
       reader.onload = e => {
         const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }));
+        // raw:true for XLSX → get raw numbers, avoids locale-formatted strings like "1,101"
+        resolve(XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true }));
       };
       reader.readAsArrayBuffer(file);
     }
@@ -1064,17 +1066,20 @@ async function handleRecFile(file) {
 }
 
 function openColModal() {
-  // Auto-detect columns that look like stock codes (4~6 digit numbers)
   const colData = {};
-  const maxRows = Math.min(recRows.length, 50);
-  const numCols = Math.max(...recRows.slice(0, maxRows).map(r => r.length));
+  // Scan ALL rows (not just first 50) to avoid missing codes in later sections
+  const numCols = Math.max(...recRows.map(r => r.length));
 
   for (let ci = 0; ci < numCols; ci++) {
     const vals = [];
     const codeVals = [];
-    for (let ri = 0; ri < maxRows; ri++) {
-      const v = String(recRows[ri]?.[ci] ?? '').trim();
-      if (v && v !== 'NaN') {
+    for (let ri = 0; ri < recRows.length; ri++) {
+      const raw = recRows[ri]?.[ci];
+      // Normalize: handle both raw numbers and strings
+      const v = (typeof raw === 'number')
+        ? (Number.isInteger(raw) ? String(raw) : '')   // integer → "1101", float → skip
+        : String(raw ?? '').replace(/[,\s]/g, '').trim(); // string → strip commas/spaces
+      if (v && v !== 'NaN' && v !== 'undefined') {
         vals.push(v);
         if (/^\d{4,6}$/.test(v)) codeVals.push(v);
       }
@@ -1142,24 +1147,29 @@ function closeColModal() {
 }
 
 function confirmColSelection() {
-  // Extract codes + try to grab adjacent name column
   recStocks = {};
   recRows.forEach(row => {
     recSelectedCols.forEach(ci => {
-      const v = String(row[ci] ?? '').trim();
+      const raw = row[ci];
+      // Normalize: handle raw numbers (from raw:true) and strings
+      const v = (typeof raw === 'number')
+        ? (Number.isInteger(raw) ? String(raw) : '')
+        : String(raw ?? '').replace(/[,\s]/g, '').trim();
+
       if (/^\d{4,6}$/.test(v)) {
         if (!recStocks[v]) {
-          // Look for name in adjacent cols (ci-1, ci+1)
           let name = '';
           for (const ni of [ci + 1, ci - 1, ci + 2]) {
-            const nv = String(row[ni] ?? '').trim();
+            const nr = row[ni];
+            const nv = (typeof nr === 'number') ? String(nr) : String(nr ?? '').trim();
             if (isValidStockName(nv)) { name = nv; break; }
           }
           recStocks[v] = name;
         }
       }
       // Also handle "代號 名稱" format in same cell
-      const parsed = parseStockCell(v);
+      const strV = String(raw ?? '').trim();
+      const parsed = parseStockCell(strV);
       if (parsed && !recStocks[parsed.code]) recStocks[parsed.code] = parsed.name;
     });
   });
