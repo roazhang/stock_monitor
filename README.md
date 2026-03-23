@@ -154,22 +154,6 @@ stock_monitor/
 └── README.md     # 說明文件
 ```
 
----
-
-## 🔄 更新工具
-
-每次從 Claude 取得新版 `index.html` 後：
-
-**方式一：GitHub 網頁**
-1. 進入 repo → 點 `index.html` → 右上角鉛筆圖示
-2. 全選後貼上新內容 → Commit changes
-
-**方式二：GitHub Desktop**
-1. 將新的 `index.html` 覆蓋本機資料夾內的舊檔
-2. Commit → Push origin
-
----
-
 ## 🛡 隱私說明
 
 - 所有資料僅在**瀏覽器本地**處理，完全離線運作
