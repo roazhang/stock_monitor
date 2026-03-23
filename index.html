@@ -1399,24 +1399,62 @@ function downloadCsv() {
 function importCathayTemplate(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    const bytes = new Uint8Array(e.target.result);
+    const bstr = e.target.result; // binary string (each char = 1 byte)
+    const bytes = new Uint8Array(bstr.length);
+    for (let i = 0; i < bstr.length; i++) bytes[i] = bstr.charCodeAt(i);
 
-    // XML 是 Big5 編碼，直接用 TextDecoder('big5') 解碼
+    // Step 1: 先讀 ASCII 部分偵測 encoding 宣告
+    const asciiHead = bstr.slice(0, 200); // 前 200 bytes 都是 ASCII，安全
+    const encMatch = asciiHead.match(/encoding="([^"]+)"/i);
+    const declaredEnc = encMatch ? encMatch[1].toLowerCase() : 'big5';
+    const isUtf8 = declaredEnc === 'utf-8' || declaredEnc === 'utf8';
+
+    // Step 2: 根據宣告選擇解碼方式
     let text = '';
-    try {
-      text = new TextDecoder('big5').decode(bytes);
-    } catch(err) {
-      // Fallback: latin1（ASCII 屬性仍可解析，中文名會亂碼但不影響 DealAcc/SSID）
-      text = new TextDecoder('latin1').decode(bytes);
+    let dealAccUI = '';
+
+    if (isUtf8) {
+      // UTF-8：直接用 TextDecoder('utf-8')，最可靠
+      text = new TextDecoder('utf-8').decode(bytes);
+      const mUI = text.match(/DealAccUI="([^"]+)"/);
+      dealAccUI = mUI ? mUI[1].trim() : '';
+    } else {
+      // Big5/CP950：用 byte-level 抓出 DealAccUI 再解碼，避免 TextDecoder 相容問題
+      text = bstr; // latin1-like，ASCII 部分可直接 regex
+
+      // 逐字節找出 DealAccUI 值，再用 TextDecoder big5 解碼
+      try {
+        const marker = 'DealAccUI="';
+        const markerBytes = [...marker].map(c => c.charCodeAt(0));
+        let pos = -1;
+        outer: for (let i = 0; i < bytes.length - markerBytes.length; i++) {
+          for (let j = 0; j < markerBytes.length; j++) {
+            if (bytes[i + j] !== markerBytes[j]) continue outer;
+          }
+          pos = i + markerBytes.length;
+          break;
+        }
+        if (pos >= 0) {
+          const valBytes = [];
+          for (let i = pos; i < bytes.length && bytes[i] !== 0x22; i++) valBytes.push(bytes[i]);
+          try {
+            dealAccUI = new TextDecoder('big5').decode(new Uint8Array(valBytes));
+          } catch(_) {
+            if (typeof XLSX !== 'undefined' && XLSX.cptable) {
+              dealAccUI = XLSX.cptable.utils.decode(950, new Uint8Array(valBytes));
+            }
+          }
+        }
+      } catch(_) {
+        const mUI = text.match(/DealAccUI="([^"]+)"/);
+        dealAccUI = mUI ? mUI[1].trim() : '';
+      }
     }
 
-    const mDealAcc   = text.match(/DealAcc="([^"]+)"/);
-    const mDealAccUI = text.match(/DealAccUI="([^"]+)"/);
-    const mSSID      = text.match(/SSID="([^"]+)"/);
-
-    const dealAcc   = mDealAcc   ? mDealAcc[1].trim()   : '';
-    const dealAccUI = mDealAccUI ? mDealAccUI[1].trim() : '';
-    const ssid      = mSSID      ? mSSID[1].trim()      : '';
+    const mDealAcc = text.match(/DealAcc="([^"]+)"/);
+    const mSSID    = text.match(/SSID="([^"]+)"/);
+    const dealAcc  = mDealAcc ? mDealAcc[1].trim() : '';
+    const ssid     = mSSID    ? mSSID[1].trim()    : '';
 
     if (!dealAcc) {
       showToast('找不到帳號資訊，請確認是國泰批次範本 XML 格式', 'error');
@@ -1432,7 +1470,7 @@ function importCathayTemplate(file) {
     showToast('✅ 已自動填入國泰帳號資訊', 'success');
     document.getElementById('cathayTemplateInput').value = '';
   };
-  reader.readAsArrayBuffer(file);
+  reader.readAsBinaryString(file);
 }
 
 
